@@ -81,7 +81,6 @@ object CloudProviderRegistry {
             capabilities = ProviderCapabilities(true, true, true, true)
         ),
 
-        // V3 国内扩展：准确识别 + Provider 能力边界，认证 API 独立实现。
         CloudProviderDescriptor(
             id = "aliyun", displayName = "阿里云盘", region = ProviderRegion.DOMESTIC,
             hosts = setOf("alipan.com", "www.alipan.com", "aliyundrive.com", "www.aliyundrive.com"),
@@ -122,7 +121,6 @@ object CloudProviderRegistry {
             capabilities = ProviderCapabilities(refreshDownloadLink = true)
         ),
 
-        // V4 海外扩展。
         CloudProviderDescriptor(
             id = "dropbox", displayName = "Dropbox", region = ProviderRegion.GLOBAL,
             hosts = setOf("dropbox.com", "www.dropbox.com"), readiness = ProviderReadiness.PUBLIC_DOWNLOAD,
@@ -186,9 +184,17 @@ object CloudProviderRegistry {
 
     fun detect(text: String): CloudProviderDescriptor? {
         val url = extractFirstUrl(text) ?: return null
-        val host = runCatching { URI(url).host?.lowercase() }.getOrNull() ?: return null
+        val uri = runCatching { URI(url) }.getOrNull() ?: return null
+        val host = uri.host?.lowercase() ?: return null
         return all.firstOrNull { provider ->
-            provider.hosts.any { allowed -> host == allowed || host.endsWith(".$allowed") }
+            val hostMatches = provider.hosts.any { allowed -> host == allowed || host.endsWith(".$allowed") }
+            if (!hostMatches) return@firstOrNull false
+            if (provider.id == "icloud") {
+                val path = uri.path.orEmpty().lowercase()
+                path == "/iclouddrive" || path.startsWith("/iclouddrive/")
+            } else {
+                true
+            }
         }
     }
 
