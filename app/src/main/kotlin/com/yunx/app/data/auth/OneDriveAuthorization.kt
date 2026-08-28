@@ -11,24 +11,25 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
 
-/**
- * Microsoft identity-platform Authorization Code + PKCE flow for OneDrive.
- *
- * Native/public clients do not use a client secret. The app registration client id and exact
- * Android redirect URI are build-time configuration, never user credentials.
- */
-class OneDriveAuthorization(
+/** Microsoft identity-platform Authorization Code + PKCE flow for OneDrive. */
+internal class OneDriveAuthorization(
     private val context: Context,
     private val client: OkHttpClient,
     private val tokenStore: OAuthTokenStore = OAuthTokenStore(context),
     private val clientId: String = BuildConfig.ONEDRIVE_CLIENT_ID,
     private val redirectUri: String = BuildConfig.ONEDRIVE_REDIRECT_URI
 ) {
-    fun isConfigured(): Boolean = clientId.isNotBlank() && redirectUri.isNotBlank()
+    fun isConfigured(): Boolean {
+        if (clientId.isBlank() || redirectUri.isBlank()) return false
+        val uri = runCatching { Uri.parse(redirectUri) }.getOrNull() ?: return false
+        return uri.scheme.equals("msauth", ignoreCase = true) &&
+            uri.host.equals(context.packageName, ignoreCase = true) &&
+            !uri.path.isNullOrBlank()
+    }
 
     fun authorizationIntent(): Result<Intent> = runCatching {
         require(isConfigured()) {
-            "OneDrive OAuth 尚未配置：需要 YUNX_ONEDRIVE_CLIENT_ID 与 YUNX_ONEDRIVE_REDIRECT_URI"
+            "OneDrive OAuth 尚未配置：需要 YUNX_ONEDRIVE_CLIENT_ID，以及 msauth://${context.packageName}/... 形式的已注册回调 URI"
         }
         val pkce = OAuthPkce.generate()
         val state = OAuthPkce.randomState()
@@ -59,9 +60,9 @@ class OneDriveAuthorization(
     suspend fun completeRedirect(uri: Uri): Result<OAuthTokenSet> = withContext(Dispatchers.IO) {
         runCatching {
             require(isRedirect(uri)) { "不是 OneDrive OAuth 回调" }
-            uri.getQueryParameter("error")?.let { error ->
+            uri.getQueryParameter("error")?.let { oauthError ->
                 val description = uri.getQueryParameter("error_description")
-                error("Microsoft 授权失败：${description ?: error}")
+                kotlin.error("Microsoft 授权失败：${description ?: oauthError}")
             }
             val code = uri.getQueryParameter("code")?.takeIf { it.isNotBlank() }
                 ?: error("Microsoft 授权回调缺少 code")
@@ -156,11 +157,11 @@ class OneDriveAuthorization(
         }
     }
 
-    private fun constantTimeEquals(a: String, b: String): Boolean {
-        val aa = a.toByteArray(Charsets.UTF_8)
-        val bb = b.toByteArray(Charsets.UTF_8)
-        return java.security.MessageDigest.isEqual(aa, bb)
-    }
+    private fun constantTimeEquals(a: String, b: String): Boolean =
+        java.security.MessageDigest.isEqual(
+            a.toByteArray(Charsets.UTF_8),
+            b.toByteArray(Charsets.UTF_8)
+        )
 
     companion object {
         private const val AUTHORIZATION_ENDPOINT =
