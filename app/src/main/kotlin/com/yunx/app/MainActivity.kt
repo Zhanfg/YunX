@@ -1,6 +1,7 @@
 package com.yunx.app
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -9,6 +10,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import com.yunx.app.data.auth.OAuthRedirectBus
 import com.yunx.app.ui.MainScreen
 import com.yunx.app.ui.theme.ComposeEmptyActivityTheme
 
@@ -22,11 +24,18 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         requestNotificationPermissionIfNeeded()
+        OAuthRedirectBus.offer(intent?.data)
         setContent {
             ComposeEmptyActivityTheme {
                 MainScreen()
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        OAuthRedirectBus.offer(intent.data)
     }
 
     /** Android 13+ 申请通知权限；低版本（<33）系统自动授予，无需申请 */
