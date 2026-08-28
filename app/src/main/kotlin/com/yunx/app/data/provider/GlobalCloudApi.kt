@@ -10,7 +10,9 @@ data class GlobalCloudFile(
     val isFolder: Boolean,
     val mimeType: String? = null,
     val modifiedTime: String? = null,
-    val downloadUrlHint: String? = null
+    val downloadUrlHint: String? = null,
+    /** Provider-specific export/download filename, e.g. Google Docs -> document.pdf. */
+    val downloadName: String? = null
 )
 
 interface GlobalCloudApi {
