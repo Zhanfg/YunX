@@ -26,9 +26,14 @@ class DownloadViewModel(private val manager: DownloadManager) : ViewModel() {
     /** 实时下载统计：任务 id → 速度/剩余时间/线程数 */
     val stats: StateFlow<Map<Long, DownloadStats>> = manager.stats
 
-    /** 添加下载任务（headers 可携带 Referer/Cookie 等） */
-    fun enqueue(url: String, fileName: String, headers: Map<String, String> = emptyMap()) {
-        viewModelScope.launch { manager.enqueue(url, fileName, headers) }
+    /** 添加下载任务（headers 可携带 Referer/OAuth Bearer/Cookie 等；敏感值不进入 UI）。 */
+    fun enqueue(
+        url: String,
+        fileName: String,
+        headers: Map<String, String> = emptyMap(),
+        size: Long = -1L
+    ) {
+        viewModelScope.launch { manager.enqueue(url, fileName, headers, size) }
     }
 
     fun pause(id: Long) = manager.pause(id)
