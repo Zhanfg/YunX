@@ -344,6 +344,12 @@ class ChunkDownloader(private val clientProvider: () -> OkHttpClient) {
                     true
                 }
                 if (ok) return@withContext true
+                // 已经写入部分 body 时，不在本层清空重试；交回 DownloadManager 做任务级恢复，
+                // 避免上层 onBytes 已累计后再次从 0 计数导致进度/速度虚高。
+                if (partFile.length() > 0L) {
+                    Log.w(TAG, "downloadFull: task=$taskId 已写入 ${partFile.length()} 字节后响应提前结束，交由任务级恢复")
+                    return@withContext false
+                }
                 if (attempt < maxAttempts - 1) {
                     delay(DownloadRecoveryPolicy.exponentialBackoff(attempt, 500L).coerceAtMost(5_000L))
                 }
@@ -358,9 +364,15 @@ class ChunkDownloader(private val clientProvider: () -> OkHttpClient) {
             } catch (e: IllegalStateException) {
                 throw e
             } catch (e: IOException) {
-                Log.w(TAG, "downloadFull: task=$taskId IO异常，更换连接后重试: ${e.message}")
+                Log.w(TAG, "downloadFull: task=$taskId IO异常: ${e.message}")
                 if (!isActive) throw CancellationException("下载被取消", e)
+                // 如果异常发生在 body 已经落盘之后，不能本层清空并从 0 重试，否则 onBytes 会重复累计。
+                if (partFile.length() > 0L) {
+                    Log.w(TAG, "downloadFull: task=$taskId 部分数据已落盘，停止本层重试并交由任务级恢复")
+                    return@withContext false
+                }
                 if (attempt >= maxAttempts - 1) return@withContext false
+                Log.w(TAG, "downloadFull: task=$taskId 建连/首包阶段失败，更换连接后重试")
                 delay(DownloadRecoveryPolicy.exponentialBackoff(attempt, 500L).coerceAtMost(5_000L))
             } finally {
                 activeCalls[taskId]?.remove(call)
