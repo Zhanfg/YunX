@@ -19,42 +19,55 @@ class GoogleDriveApi(
     ): Result<List<GlobalCloudFile>> = withContext(Dispatchers.IO) {
         runCatching {
             val parent = parentId?.takeIf { it.isNotBlank() } ?: "root"
-            val url = "$API_BASE/files".toHttpUrl().newBuilder()
-                .addQueryParameter("q", "'$parent' in parents and trashed = false")
-                .addQueryParameter("spaces", "drive")
-                .addQueryParameter("pageSize", "1000")
-                .addQueryParameter("fields", "files(id,name,mimeType,size,modifiedTime)")
-                .addQueryParameter("orderBy", "folder,name_natural")
-                .build()
-            val request = Request.Builder()
-                .url(url)
-                .header("Authorization", "Bearer $accessToken")
-                .header("Accept", "application/json")
-                .build()
-            client.newCall(request).execute().use { response ->
-                val body = response.body?.string().orEmpty()
-                if (!response.isSuccessful) error(apiError("Google Drive", response.code, body))
-                val files = JSONObject(body).optJSONArray("files")
-                    ?: return@use emptyList<GlobalCloudFile>()
-                buildList {
-                    for (index in 0 until files.length()) {
-                        val item = files.getJSONObject(index)
-                        val mime = item.optString("mimeType")
-                        val export = exportSpec(mime)
-                        add(
-                            GlobalCloudFile(
+            val result = mutableListOf<GlobalCloudFile>()
+            var pageToken: String? = null
+            var pageCount = 0
+            do {
+                val urlBuilder = "$API_BASE/files".toHttpUrl().newBuilder()
+                    .addQueryParameter("q", "'$parent' in parents and trashed = false")
+                    .addQueryParameter("spaces", "drive")
+                    .addQueryParameter("pageSize", "1000")
+                    .addQueryParameter(
+                        "fields",
+                        "nextPageToken,files(id,name,mimeType,size,modifiedTime)"
+                    )
+                    .addQueryParameter("orderBy", "folder,name_natural")
+                pageToken?.let { urlBuilder.addQueryParameter("pageToken", it) }
+
+                val request = Request.Builder()
+                    .url(urlBuilder.build())
+                    .header("Authorization", "Bearer $accessToken")
+                    .header("Accept", "application/json")
+                    .build()
+                client.newCall(request).execute().use { response ->
+                    val body = response.body?.string().orEmpty()
+                    if (!response.isSuccessful) error(apiError("Google Drive", response.code, body))
+                    val json = JSONObject(body)
+                    val files = json.optJSONArray("files")
+                    if (files != null) {
+                        for (index in 0 until files.length()) {
+                            val item = files.getJSONObject(index)
+                            val mime = item.optString("mimeType")
+                            val export = exportSpec(mime)
+                            result += GlobalCloudFile(
                                 id = item.getString("id"),
                                 name = item.optString("name", "未命名"),
                                 size = item.optLong("size", 0L),
                                 isFolder = mime == FOLDER_MIME,
                                 mimeType = mime,
                                 modifiedTime = item.optString("modifiedTime").takeIf(String::isNotBlank),
-                                downloadName = export?.let { appendExtension(item.optString("name", "未命名"), it.extension) }
+                                downloadName = export?.let {
+                                    appendExtension(item.optString("name", "未命名"), it.extension)
+                                }
                             )
-                        )
+                        }
                     }
+                    pageToken = json.optString("nextPageToken").takeIf(String::isNotBlank)
                 }
-            }
+                pageCount++
+                check(pageCount <= MAX_PAGES_PER_FOLDER) { "Google Drive 目录分页异常：超过安全页数上限" }
+            } while (pageToken != null)
+            result
         }
     }
 
@@ -137,5 +150,6 @@ class GoogleDriveApi(
         const val GOOGLE_SLIDES = "application/vnd.google-apps.presentation"
         const val GOOGLE_DRAWING = "application/vnd.google-apps.drawing"
         const val GOOGLE_VID = "application/vnd.google-apps.vid"
+        const val MAX_PAGES_PER_FOLDER = 1000
     }
 }
