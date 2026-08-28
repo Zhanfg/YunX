@@ -10,7 +10,7 @@ import com.yunx.app.data.security.CredentialCipher
  * Bearer and refresh tokens are encrypted with the existing Android-Keystore-backed
  * [CredentialCipher]. Non-secret expiry/scope metadata stays in private SharedPreferences.
  */
-class OAuthTokenStore(
+internal class OAuthTokenStore(
     context: Context,
     private val cipher: CredentialCipher = AndroidKeystoreCredentialCipher()
 ) {
