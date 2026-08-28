@@ -112,6 +112,12 @@ object CloudProviderRegistry {
             authMode = ProviderAuthMode.OAUTH,
             capabilities = ProviderCapabilities(refreshDownloadLink = true)
         ),
+        CloudProviderDescriptor(
+            id = "ctfile", displayName = "城通网盘", region = ProviderRegion.DOMESTIC,
+            hosts = setOf("ctfile.com", "www.ctfile.com", "app.ctfile.com"),
+            readiness = ProviderReadiness.DETECTED, authMode = ProviderAuthMode.WEB_SESSION,
+            capabilities = ProviderCapabilities(refreshDownloadLink = true)
+        ),
 
         // V4 海外扩展。
         CloudProviderDescriptor(
