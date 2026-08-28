@@ -8,6 +8,9 @@ enum class ProviderReadiness {
     /** 已接入现有 YunX 分享浏览/取链流程。 */
     INTEGRATED,
 
+    /** 官方账号授权 + 私人云盘浏览/下载 API 已接入，但分享解析可能仍独立实现。 */
+    ACCOUNT_API,
+
     /** 无需账号即可把公开分享转换为可下载候选地址。 */
     PUBLIC_DOWNLOAD,
 
@@ -128,15 +131,21 @@ object CloudProviderRegistry {
         ),
         CloudProviderDescriptor(
             id = "google_drive", displayName = "Google Drive", region = ProviderRegion.GLOBAL,
-            hosts = setOf("drive.google.com", "docs.google.com"), readiness = ProviderReadiness.DETECTED,
+            hosts = setOf("drive.google.com", "docs.google.com"), readiness = ProviderReadiness.ACCOUNT_API,
             authMode = ProviderAuthMode.OAUTH,
-            capabilities = ProviderCapabilities(refreshDownloadLink = true)
+            capabilities = ProviderCapabilities(directDownload = true, refreshDownloadLink = true)
         ),
         CloudProviderDescriptor(
             id = "onedrive", displayName = "OneDrive", region = ProviderRegion.GLOBAL,
-            hosts = setOf("1drv.ms", "onedrive.live.com"), readiness = ProviderReadiness.DETECTED,
-            authMode = ProviderAuthMode.OAUTH,
-            capabilities = ProviderCapabilities(refreshDownloadLink = true)
+            hosts = setOf("1drv.ms", "onedrive.live.com", "onedrive.com", "sharepoint.com"),
+            readiness = ProviderReadiness.ACCOUNT_API, authMode = ProviderAuthMode.OAUTH,
+            capabilities = ProviderCapabilities(directDownload = true, refreshDownloadLink = true)
+        ),
+        CloudProviderDescriptor(
+            id = "icloud", displayName = "iCloud Drive", region = ProviderRegion.GLOBAL,
+            hosts = setOf("icloud.com", "www.icloud.com"), readiness = ProviderReadiness.DETECTED,
+            authMode = ProviderAuthMode.NONE,
+            capabilities = ProviderCapabilities()
         ),
         CloudProviderDescriptor(
             id = "mega", displayName = "MEGA", region = ProviderRegion.GLOBAL,
