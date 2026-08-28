@@ -26,33 +26,40 @@ class CloudProviderRegistryTest {
     }
 
     @Test
-    fun detectsV4GlobalExpansionProviders() {
+    fun detectsGlobalPublicProviders() {
         assertEquals("dropbox", CloudProviderRegistry.detect("https://www.dropbox.com/scl/fi/a/file.zip")?.id)
         assertEquals("google_drive", CloudProviderRegistry.detect("https://drive.google.com/file/d/abc/view")?.id)
         assertEquals("onedrive", CloudProviderRegistry.detect("https://1drv.ms/u/s!abc")?.id)
-        assertEquals("mega", CloudProviderRegistry.detect("https://mega.nz/file/abc#key")?.id)
-        assertEquals("box", CloudProviderRegistry.detect("https://app.box.com/s/abc")?.id)
+        assertEquals("onedrive", CloudProviderRegistry.detect("https://tenant.sharepoint.com/:u:/g/example")?.id)
+        assertEquals("icloud_drive", CloudProviderRegistry.detect("https://www.icloud.com/iclouddrive/abc#file")?.id)
         assertEquals("pcloud", CloudProviderRegistry.detect("https://e.pcloud.link/publink/show?code=abc")?.id)
         assertEquals("pcloud", CloudProviderRegistry.detect("https://pc.cd/abc")?.id)
+    }
+
+    @Test
+    fun detectsOtherGlobalProvidersWithoutOverclaiming() {
+        assertEquals("mega", CloudProviderRegistry.detect("https://mega.nz/file/abc#key")?.id)
+        assertEquals("box", CloudProviderRegistry.detect("https://app.box.com/s/abc")?.id)
         assertEquals("mediafire", CloudProviderRegistry.detect("https://www.mediafire.com/file/abc/file.zip/file")?.id)
     }
 
     @Test
-    fun rejectsLookalikeAndNonHttpHosts() {
+    fun rejectsLookalikeNonHttpAndNonDriveIcloudHosts() {
         assertNull(CloudProviderRegistry.detect("https://dropbox.com.evil.example/s/abc"))
         assertNull(CloudProviderRegistry.detect("https://pan.baidu.com.evil.example/s/abc"))
+        assertNull(CloudProviderRegistry.detect("https://sharepoint.com.evil.example/file"))
+        assertNull(CloudProviderRegistry.detect("https://www.icloud.com/photos/abc"))
         assertNull(CloudProviderRegistry.detect("javascript:https://www.dropbox.com/s/abc"))
     }
 
     @Test
-    fun readinessDoesNotOverclaimDetectedProviders() {
-        val dropbox = CloudProviderRegistry.byId("dropbox")!!
-        val pcloud = CloudProviderRegistry.byId("pcloud")!!
-        val aliyun = CloudProviderRegistry.byId("aliyun")!!
-        assertEquals(ProviderReadiness.PUBLIC_DOWNLOAD, dropbox.readiness)
-        assertEquals(ProviderReadiness.PUBLIC_DOWNLOAD, pcloud.readiness)
-        assertTrue(pcloud.capabilities.alternativeEndpoints)
-        assertEquals(ProviderReadiness.DETECTED, aliyun.readiness)
-        assertTrue(aliyun.capabilities.refreshDownloadLink)
+    fun readinessMatchesImplementedPublicResolvers() {
+        for (id in listOf("dropbox", "pcloud", "google_drive", "onedrive", "icloud_drive")) {
+            val provider = CloudProviderRegistry.byId(id)!!
+            assertEquals(ProviderReadiness.PUBLIC_DOWNLOAD, provider.readiness)
+            assertTrue(provider.capabilities.directDownload)
+            assertTrue(PublicShareResolvers.supports(id))
+        }
+        assertEquals(ProviderReadiness.DETECTED, CloudProviderRegistry.byId("aliyun")!!.readiness)
     }
 }
