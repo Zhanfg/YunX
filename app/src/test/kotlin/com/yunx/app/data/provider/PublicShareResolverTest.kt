@@ -1,5 +1,6 @@
 package com.yunx.app.data.provider
 
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -7,7 +8,7 @@ import org.junit.Test
 
 class PublicShareResolverTest {
     @Test
-    fun dropboxForcesDownloadAndPreservesShareKey() {
+    fun dropboxForcesDownloadAndPreservesShareKey() = runBlocking {
         val result = PublicShareResolvers.resolve(
             "https://www.dropbox.com/scl/fi/token/file.zip?rlkey=secret&dl=0"
         ).getOrThrow()
@@ -19,11 +20,24 @@ class PublicShareResolverTest {
     }
 
     @Test
-    fun dropboxAddsDownloadParameterWhenMissing() {
+    fun dropboxAddsDownloadParameterWhenMissing() = runBlocking {
         val result = PublicShareResolvers.resolve(
             "https://www.dropbox.com/s/abc/example.txt"
         ).getOrThrow()
         assertTrue(result.downloadUrl.endsWith("?dl=1"))
+    }
+
+    @Test
+    fun pCloudExtractsLongAndShortPublicCodesWithoutNetwork() {
+        assertEquals(
+            "ABC_def-123",
+            PublicShareResolvers.pCloudCode("https://e.pcloud.link/publink/show?code=ABC_def-123")
+        )
+        assertEquals(
+            "shortCode",
+            PublicShareResolvers.pCloudCode("https://pc.cd/shortCode")
+        )
+        assertTrue(PublicShareResolvers.supports("pcloud"))
     }
 
     @Test
@@ -40,14 +54,14 @@ class PublicShareResolverTest {
     }
 
     @Test
-    fun recognizedButNotIntegratedProviderReturnsExplicitUnsupportedError() {
+    fun recognizedButNotIntegratedProviderReturnsExplicitUnsupportedError() = runBlocking {
         val result = PublicShareResolvers.resolve("https://www.alipan.com/s/example")
         assertTrue(result.isFailure)
         assertTrue(result.exceptionOrNull() is UnsupportedOperationException)
     }
 
     @Test
-    fun lookalikeDropboxHostCannotUseResolver() {
+    fun lookalikeDropboxHostCannotUseResolver() = runBlocking {
         val result = PublicShareResolvers.resolve("https://dropbox.com.evil.example/s/abc")
         assertTrue(result.isFailure)
     }
