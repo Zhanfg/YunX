@@ -37,13 +37,10 @@ data class CloudProviderDescriptor(
 
 /**
  * YunX Provider 能力注册表。
- *
- * 注意：DETECTED 不等于“假装已支持”。它只说明输入层能够正确识别平台，UI/日志可以给出准确提示，
- * 不会错误落入夸克等现有 Provider。真正完成浏览/取链后再提升为 INTEGRATED/PUBLIC_DOWNLOAD。
+ * DETECTED 只代表准确识别，不冒充完整支持；完整浏览/取链后再提升 readiness。
  */
 object CloudProviderRegistry {
     val all: List<CloudProviderDescriptor> = listOf(
-        // ---- 已有国内 Provider ----
         CloudProviderDescriptor(
             id = "quark", displayName = "夸克网盘", region = ProviderRegion.DOMESTIC,
             hosts = setOf("pan.quark.cn"), readiness = ProviderReadiness.INTEGRATED,
@@ -81,7 +78,7 @@ object CloudProviderRegistry {
             capabilities = ProviderCapabilities(true, true, true, true)
         ),
 
-        // ---- V3 国内扩展：先完成准确识别/能力边界，认证 API 独立实现 ----
+        // V3 国内扩展：准确识别 + Provider 能力边界，认证 API 独立实现。
         CloudProviderDescriptor(
             id = "aliyun", displayName = "阿里云盘", region = ProviderRegion.DOMESTIC,
             hosts = setOf("alipan.com", "www.alipan.com", "aliyundrive.com", "www.aliyundrive.com"),
@@ -116,7 +113,7 @@ object CloudProviderRegistry {
             capabilities = ProviderCapabilities(refreshDownloadLink = true)
         ),
 
-        // ---- V4 海外扩展 ----
+        // V4 海外扩展。
         CloudProviderDescriptor(
             id = "dropbox", displayName = "Dropbox", region = ProviderRegion.GLOBAL,
             hosts = setOf("dropbox.com", "www.dropbox.com"), readiness = ProviderReadiness.PUBLIC_DOWNLOAD,
@@ -149,9 +146,16 @@ object CloudProviderRegistry {
         ),
         CloudProviderDescriptor(
             id = "pcloud", displayName = "pCloud", region = ProviderRegion.GLOBAL,
-            hosts = setOf("pcloud.com", "www.pcloud.com", "e.pcloud.link", "u.pcloud.link"),
-            readiness = ProviderReadiness.DETECTED, authMode = ProviderAuthMode.OAUTH,
-            capabilities = ProviderCapabilities(refreshDownloadLink = true)
+            hosts = setOf(
+                "pcloud.com", "www.pcloud.com", "my.pcloud.com",
+                "e.pcloud.link", "u.pcloud.link", "pc.cd"
+            ),
+            readiness = ProviderReadiness.PUBLIC_DOWNLOAD, authMode = ProviderAuthMode.NONE,
+            capabilities = ProviderCapabilities(
+                directDownload = true,
+                refreshDownloadLink = true,
+                alternativeEndpoints = true
+            )
         ),
         CloudProviderDescriptor(
             id = "mediafire", displayName = "MediaFire", region = ProviderRegion.GLOBAL,
