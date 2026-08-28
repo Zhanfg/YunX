@@ -40,10 +40,12 @@ class CloudProviderRegistryTest {
     }
 
     @Test
-    fun rejectsLookalikeAndNonHttpHosts() {
+    fun rejectsLookalikeNonHttpAndNonDriveICloudUrls() {
         assertNull(CloudProviderRegistry.detect("https://dropbox.com.evil.example/s/abc"))
         assertNull(CloudProviderRegistry.detect("https://pan.baidu.com.evil.example/s/abc"))
         assertNull(CloudProviderRegistry.detect("https://sharepoint.com.evil.example/x"))
+        assertNull(CloudProviderRegistry.detect("https://www.icloud.com/mail"))
+        assertNull(CloudProviderRegistry.detect("https://www.icloud.com/photos"))
         assertNull(CloudProviderRegistry.detect("javascript:https://www.dropbox.com/s/abc"))
     }
 
