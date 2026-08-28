@@ -22,6 +22,7 @@ class CloudProviderRegistryTest {
         assertEquals("lanzou", CloudProviderRegistry.detect("https://example.lanzoui.com/iabc")?.id)
         assertEquals("115", CloudProviderRegistry.detect("https://share.115.com/example")?.id)
         assertEquals("pikpak", CloudProviderRegistry.detect("https://mypikpak.com/s/example")?.id)
+        assertEquals("ctfile", CloudProviderRegistry.detect("https://www.ctfile.com/f/example")?.id)
     }
 
     @Test
@@ -32,6 +33,7 @@ class CloudProviderRegistryTest {
         assertEquals("mega", CloudProviderRegistry.detect("https://mega.nz/file/abc#key")?.id)
         assertEquals("box", CloudProviderRegistry.detect("https://app.box.com/s/abc")?.id)
         assertEquals("pcloud", CloudProviderRegistry.detect("https://e.pcloud.link/publink/show?code=abc")?.id)
+        assertEquals("pcloud", CloudProviderRegistry.detect("https://pc.cd/abc")?.id)
         assertEquals("mediafire", CloudProviderRegistry.detect("https://www.mediafire.com/file/abc/file.zip/file")?.id)
     }
 
@@ -45,8 +47,11 @@ class CloudProviderRegistryTest {
     @Test
     fun readinessDoesNotOverclaimDetectedProviders() {
         val dropbox = CloudProviderRegistry.byId("dropbox")!!
+        val pcloud = CloudProviderRegistry.byId("pcloud")!!
         val aliyun = CloudProviderRegistry.byId("aliyun")!!
         assertEquals(ProviderReadiness.PUBLIC_DOWNLOAD, dropbox.readiness)
+        assertEquals(ProviderReadiness.PUBLIC_DOWNLOAD, pcloud.readiness)
+        assertTrue(pcloud.capabilities.alternativeEndpoints)
         assertEquals(ProviderReadiness.DETECTED, aliyun.readiness)
         assertTrue(aliyun.capabilities.refreshDownloadLink)
     }
