@@ -183,8 +183,17 @@ object CloudProviderRegistry {
         }
     }
 
-    fun extractFirstUrl(text: String): String? =
-        Regex("""https?://[^\s]+""", RegexOption.IGNORE_CASE)
-            .find(text.trim())?.value
-            ?.trimEnd('。', '，', ',', '；', ';', ')', ']', '}', '"', '\'')
+    fun extractFirstUrl(text: String): String? {
+        val trimmed = text.trim()
+        val match = Regex("""https?://[^\s]+""", RegexOption.IGNORE_CASE).find(trimmed)
+            ?: return null
+
+        // Do not reinterpret an URL embedded directly inside another URI scheme such as
+        // `javascript:https://...` as a normal cloud-share link. Plain surrounding prose remains
+        // supported (including Chinese text such as `链接：https://...`).
+        val prefix = trimmed.substring(0, match.range.first)
+        if (Regex("""[A-Za-z][A-Za-z0-9+.-]*:$""").containsMatchIn(prefix)) return null
+
+        return match.value.trimEnd('。', '，', ',', '；', ';', ')', ']', '}', '"', '\'')
+    }
 }
