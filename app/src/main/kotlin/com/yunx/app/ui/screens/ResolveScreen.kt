@@ -251,6 +251,7 @@ fun ResolveScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ResolveInputContent(
     viewModel: ResolveViewModel,
