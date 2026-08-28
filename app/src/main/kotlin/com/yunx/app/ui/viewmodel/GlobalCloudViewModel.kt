@@ -6,7 +6,6 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.yunx.app.data.download.DownloadManager
 import com.yunx.app.data.provider.GlobalCloudApi
 import com.yunx.app.data.provider.GlobalCloudFile
 import kotlinx.coroutines.launch
@@ -22,7 +21,7 @@ class GlobalCloudViewModel(
     val providerId: String,
     private val api: GlobalCloudApi,
     private val accessTokenProvider: suspend () -> String?,
-    private val downloadManager: DownloadManager
+    private val enqueueDownload: (url: String, fileName: String, headers: Map<String, String>, size: Long) -> Unit
 ) : ViewModel() {
     var uiState by mutableStateOf<GlobalCloudUiState>(GlobalCloudUiState.Idle)
         private set
@@ -75,11 +74,11 @@ class GlobalCloudViewModel(
             }
             api.getDownloadSource(file, token)
                 .onSuccess { source ->
-                    downloadManager.enqueue(
-                        url = source.primaryUrl,
-                        fileName = file.name,
-                        headers = source.headers,
-                        size = file.size.takeIf { it > 0 } ?: -1L
+                    enqueueDownload(
+                        source.primaryUrl,
+                        file.name,
+                        source.headers,
+                        file.size.takeIf { it > 0 } ?: -1L
                     )
                     downloadStarted = true
                     message = "已加入下载任务"
@@ -107,7 +106,10 @@ class GlobalCloudViewModel(
             api.listFiles(current.id, token)
                 .onSuccess { files ->
                     uiState = GlobalCloudUiState.Content(
-                        files.sortedWith(compareByDescending<GlobalCloudFile> { it.isFolder }.thenBy { it.name.lowercase() })
+                        files.sortedWith(
+                            compareByDescending<GlobalCloudFile> { it.isFolder }
+                                .thenBy { it.name.lowercase() }
+                        )
                     )
                 }
                 .onFailure { uiState = GlobalCloudUiState.Error(it.message ?: "读取网盘失败") }
@@ -118,12 +120,12 @@ class GlobalCloudViewModel(
         private val providerId: String,
         private val api: GlobalCloudApi,
         private val accessTokenProvider: suspend () -> String?,
-        private val downloadManager: DownloadManager
+        private val enqueueDownload: (String, String, Map<String, String>, Long) -> Unit
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             require(modelClass.isAssignableFrom(GlobalCloudViewModel::class.java))
-            return GlobalCloudViewModel(providerId, api, accessTokenProvider, downloadManager) as T
+            return GlobalCloudViewModel(providerId, api, accessTokenProvider, enqueueDownload) as T
         }
     }
 }
