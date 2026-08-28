@@ -7,6 +7,18 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+fun String.asBuildConfigString(): String =
+    "\"" + replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
+val oneDriveClientId = providers.gradleProperty("YUNX_ONEDRIVE_CLIENT_ID")
+    .orElse(providers.environmentVariable("YUNX_ONEDRIVE_CLIENT_ID"))
+    .orElse("")
+    .get()
+val oneDriveRedirectUri = providers.gradleProperty("YUNX_ONEDRIVE_REDIRECT_URI")
+    .orElse(providers.environmentVariable("YUNX_ONEDRIVE_REDIRECT_URI"))
+    .orElse("")
+    .get()
+
 android {
     namespace = "com.yunx.app"
     compileSdk = 36
@@ -19,6 +31,8 @@ android {
         versionName = "1.2.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "ONEDRIVE_CLIENT_ID", oneDriveClientId.asBuildConfigString())
+        buildConfigField("String", "ONEDRIVE_REDIRECT_URI", oneDriveRedirectUri.asBuildConfigString())
     }
 
     signingConfigs {
@@ -38,6 +52,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     compileOptions {
@@ -56,6 +71,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // Google Identity Services AuthorizationClient (Drive OAuth scopes; no login-cookie extraction).
+    implementation("com.google.android.gms:play-services-auth:21.6.0")
     implementation(libs.material)   // 原 libs.material.color.utilities -> 改为官方 Material 主库（含 color.utilities 包）
 
     implementation(libs.room.runtime)
