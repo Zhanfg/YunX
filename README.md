@@ -2,11 +2,11 @@
 
 网盘分享链接解析与高速下载的 Android 应用。粘贴分享链接即可浏览分享内容并下载文件。
 
-> 本 fork 正在维护增强版下载内核与 Provider 架构；开发分支为 `feat/yunx-enhanced-foundation`。
+> 增强版开发分支：`feat/yunx-enhanced-foundation`。
 
-## 当前支持平台
+## Provider 状态
 
-**不建议使用百度网盘进行高频解析/转存，可能触发平台风控。**
+**完整集成（浏览分享 / 取链 / 下载，部分平台支持转存）：**
 
 - 夸克网盘
 - UC 网盘
@@ -15,33 +15,38 @@
 - 123 云盘
 - 139 网盘（和彩云）
 
-## 增强版方向
+**公开分享可直接下载：**
 
-- **分享链接解析**：自动识别平台、分享 ID 与提取码
-- **高速下载**：Range 分片并发 + 断点续传；用户线程上限提升到 128，实际 worker 会受 Provider/CDN 安全策略约束
-- **下载恢复**：保留分片、任务请求头与分片规划，失败后可重试并继续下载
-- **Provider 扩展**：逐步接入更多国内/海外网盘，并把认证、分享解析、取链和转存从 UI 解耦
-- **临时转存清理**：百度/迅雷取链后清理；夸克保留到下载完成或删除任务后清理
-- **登录**：夸克 / UC / 百度 / 139 使用 WebView Cookie；迅雷使用密码/短信；123 使用账号密码换取 JWT
-- **认证备份**：使用用户口令派生密钥，以 AES-GCM 加密 Cookie/JWT 备份文件
-- **剪贴板识别**：复制分享链接后回到应用，提示一键粘贴解析
+- Dropbox（官方 `dl=1` 下载模式）
+- pCloud（官方 public-link API；支持多 CDN host）
 
-## 截图
+**V3/V4 已识别，正在等待独立认证/API Provider 接入：**
 
-| 解析直链 | 分享解析 | 下载管理 |
-|:---:|:---:|:---:|
-| ![解析输入](images/Link.jpg) | ![文件列表](images/Parsing.jpg) | ![下载管理](images/Download.jpg) |
+- 国内：阿里云盘、天翼云盘、蓝奏云、115、PikPak、城通网盘
+- 海外：Google Drive、OneDrive、MEGA、Box、MediaFire
 
-| 网盘登录 | 设置 | 关于 |
-|:---:|:---:|:---:|
-| ![网盘登录](images/Login.jpg) | ![设置](images/Setting.jpg) | ![关于](images/about.jpg) |
+“已识别”不会伪装成完整支持：输入这些链接时应用会明确显示对应平台及当前适配状态，不会错误落入夸克等旧 Provider。
+
+> 不建议使用百度网盘进行高频解析/转存，可能触发平台风控。
+
+## V1–V4 增强
+
+- **下载线程上限**：设置页支持 `64 / 128`；这是用户允许的最大值，实际 worker 仍受 Provider/CDN 安全策略约束。
+- **并发策略**：保留迅雷约 8 worker 的安全起始限制，并加入独立的自适应并发策略与回落规则。
+- **动态重连**：分片及单流遇到 IO、HTTP 408/425/429/5xx 时退避重试；失败后的请求强制放弃旧 keep-alive 连接并创建新 Call。
+- **恢复模型**：新增可刷新 `DownloadSource`、多 endpoint、URL 过期与恢复决策模型，为后续 Provider 重签名 / CDN failover 提供统一边界。
+- **断点续传与完整性**：继续保留现有 part/seg 续传、Range 校验、合并后总大小校验。
+- **Provider Registry**：国内/海外平台统一描述 region、认证方式、能力和 readiness，新增平台不再直接污染旧 `SharePlatform` 枚举。
+- **公开下载 Provider**：Dropbox 与 pCloud 已接入真实解析入口，无需先登录现有六个平台。
+- **Android 冷启动**：新增 day/night 与 Android 12+ splash 主题资源，修复深色模式启动白闪方向的问题。
+- **工程维护**：CI 增加 lint、单测、Debug/Release 编译；清理本地 `workspace.json`；文档与 SDK 信息同步。
 
 ## 使用
 
-1. 在「网盘」页登录需要认证的平台
-2. 在「解析」页粘贴分享链接（可带提取码）
-3. 浏览分享内容，点击文件获取下载直链
-4. 「下载」页查看进度，支持暂停 / 继续 / 删除 / 打开
+1. 在「网盘」页登录需要认证的平台。
+2. 在「解析」页粘贴分享链接（可带提取码）。
+3. 已完整集成的平台可浏览分享内容并获取下载链接；Dropbox / pCloud 公开文件可直接进入下载流程。
+4. 「下载」页查看进度，支持暂停 / 继续 / 删除 / 打开。
 
 ## 技术栈
 
@@ -61,7 +66,7 @@ cd YunX
 git checkout feat/yunx-enhanced-foundation
 ```
 
-用 Android Studio 打开项目即可构建。CI 会执行 lint、单元测试、Debug APK 和 Release 编译验证。
+用 Android Studio 打开项目即可构建。CI 工作流配置为执行 lint、单元测试、Debug APK 和 Release 编译验证。
 
 ## 免责声明
 
