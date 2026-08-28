@@ -20,6 +20,9 @@ import com.yunx.app.data.network.XunleiConstants
 import com.yunx.app.data.network.model.DownloadLink
 import com.yunx.app.data.network.model.ShareFile
 import com.yunx.app.data.network.model.ShareSession
+import com.yunx.app.data.provider.CloudProviderRegistry
+import com.yunx.app.data.provider.ProviderReadiness
+import com.yunx.app.data.provider.PublicShareResolvers
 import com.yunx.app.data.repository.BaiduAccountRepository
 import com.yunx.app.data.repository.BaiduResolveRepository
 import com.yunx.app.data.repository.C139AccountRepository
@@ -45,7 +48,7 @@ sealed interface ResolveUiState {
 
 /**
  * 解析页 ViewModel：分享解析状态机 + 目录导航 + 下载直链。
- * 支持夸克 / UC / 迅雷，按链接自动路由到对应平台仓库与凭证。
+ * 现有六个平台继续走原有 Repository；无需登录的公开分享 Provider 走增强解析层。
  */
 class ResolveViewModel(
     private val accountRepository: QuarkAccountRepository,
@@ -90,36 +93,38 @@ class ResolveViewModel(
 
     /** 当前分享是否支持转存（夸克 / UC / 迅雷 / 百度 / 139 / 123） */
     val canSave: Boolean
-        get() = currentPlatform == SharePlatform.QUARK ||
-            currentPlatform == SharePlatform.UC ||
-            currentPlatform == SharePlatform.XUNLEI ||
-            currentPlatform == SharePlatform.BAIDU ||
-            currentPlatform == SharePlatform.C139 ||
-            currentPlatform == SharePlatform.PAN123
+        get() = currentPublicProviderId == null && (
+            currentPlatform == SharePlatform.QUARK ||
+                currentPlatform == SharePlatform.UC ||
+                currentPlatform == SharePlatform.XUNLEI ||
+                currentPlatform == SharePlatform.BAIDU ||
+                currentPlatform == SharePlatform.C139 ||
+                currentPlatform == SharePlatform.PAN123
+            )
 
     /** 当前分享是否为迅雷（UI 选择迅雷版转存目录选择器） */
     val isSaveXunlei: Boolean
-        get() = currentPlatform == SharePlatform.XUNLEI
+        get() = currentPublicProviderId == null && currentPlatform == SharePlatform.XUNLEI
 
     /** 当前分享是否为百度（UI 选择百度版转存目录选择器） */
     val isSaveBaidu: Boolean
-        get() = currentPlatform == SharePlatform.BAIDU
+        get() = currentPublicProviderId == null && currentPlatform == SharePlatform.BAIDU
 
     /** 当前分享是否为百度（限速提示判断用） */
     val isBaidu: Boolean
-        get() = currentPlatform == SharePlatform.BAIDU
+        get() = currentPublicProviderId == null && currentPlatform == SharePlatform.BAIDU
 
     /** 当前分享是否为 139（UI 选择 139 版转存目录选择器） */
     val isSaveC139: Boolean
-        get() = currentPlatform == SharePlatform.C139
+        get() = currentPublicProviderId == null && currentPlatform == SharePlatform.C139
 
     /** 当前分享是否为 UC（UI 选择 UC 版转存目录选择器） */
     val isSaveUC: Boolean
-        get() = currentPlatform == SharePlatform.UC
+        get() = currentPublicProviderId == null && currentPlatform == SharePlatform.UC
 
     /** 当前分享是否为 123（UI 选择 123 版转存目录选择器） */
     val isSavePan123: Boolean
-        get() = currentPlatform == SharePlatform.PAN123
+        get() = currentPublicProviderId == null && currentPlatform == SharePlatform.PAN123
 
     /** 请求转存：记录目标文件并打开目录选择弹窗 */
     fun requestSave(file: ShareFile) {
@@ -205,7 +210,6 @@ class ResolveViewModel(
                             }
                     }
                     SharePlatform.PAN123 -> {
-                        // 123 保存到个人盘：copy/save（mshare 无需签名）+ 轮询 task
                         val credential = currentCredential()
                         if (credential.isNullOrBlank()) {
                             saveMessage = "请先登录123云盘"
@@ -310,7 +314,6 @@ class ResolveViewModel(
                 var okCount = 0
                 var interrupted = false
                 for (file in files) {
-                    // 用户点击「中断」：停止剩余项，已转存的不回滚
                     if (batchCancelRequested) {
                         interrupted = true
                         downloadError = "已中断批量转存"
@@ -318,29 +321,12 @@ class ResolveViewModel(
                     }
                     runCatching {
                         when (currentPlatform) {
-                            SharePlatform.XUNLEI -> {
-                                // 迅雷批量转存到根目录（parent_id 为空）
-                                xunleiResolveRepository.transferFile(s, file, "", credential)
-                            }
-                            SharePlatform.BAIDU -> {
-                                // 百度批量转存到根目录（绝对路径 "/"）
-                                baiduResolveRepository.transferFile(s, file, "/", credential)
-                            }
-                            SharePlatform.C139 -> {
-                                // 139 批量转存到根目录（fileId "/"）
-                                c139ResolveRepository.transferFile(s, file, "/", credential)
-                            }
-                            SharePlatform.UC -> {
-                                // UC 批量转存到根目录（pdir_fid "0"）
-                                ucResolveRepository.transferFile(s, file, UCConstants.DEFAULT_PDIR_FID, credential)
-                            }
-                            SharePlatform.PAN123 -> {
-                                // 123 批量转存到根目录（fileId "0"）
-                                pan123ResolveRepository.transferFile(s, file, "0", credential)
-                            }
-                            else -> {
-                                resolveRepository.saveToCloud(s, file, QuarkConstants.DEFAULT_PDIR_FID, credential)
-                            }
+                            SharePlatform.XUNLEI -> xunleiResolveRepository.transferFile(s, file, "", credential)
+                            SharePlatform.BAIDU -> baiduResolveRepository.transferFile(s, file, "/", credential)
+                            SharePlatform.C139 -> c139ResolveRepository.transferFile(s, file, "/", credential)
+                            SharePlatform.UC -> ucResolveRepository.transferFile(s, file, UCConstants.DEFAULT_PDIR_FID, credential)
+                            SharePlatform.PAN123 -> pan123ResolveRepository.transferFile(s, file, "0", credential)
+                            else -> resolveRepository.saveToCloud(s, file, QuarkConstants.DEFAULT_PDIR_FID, credential)
                         }
                     }.onSuccess { okCount++ }
                 }
@@ -369,13 +355,11 @@ class ResolveViewModel(
                     downloadError = "请先登录网盘"
                     return@launch
                 }
-                // 夸克/UC 共用 __puus：取链与下载必须用同一份已刷新 Cookie（直链签名绑定取链时刻的 __puus）
                 val quarkCred = when (currentPlatform) {
                     SharePlatform.QUARK -> accountRepository.getFreshCookie() ?: credential
                     SharePlatform.UC -> ucAccountRepository.getFreshCookie() ?: credential
                     else -> credential
                 }
-                // 展开选中项：文件直接加入，文件夹递归收集（相对路径 = 文件夹名/子/...）
                 val tasks = mutableListOf<Pair<ShareFile, String>>()
                 for (file in files) {
                     if (file.isdir) {
@@ -392,7 +376,6 @@ class ResolveViewModel(
                 var okCount = 0
                 var interrupted = false
                 for ((index, task) in tasks.withIndex()) {
-                    // 用户点击「中断」：停止剩余项，已入队的任务保留下载
                     if (batchCancelRequested) {
                         interrupted = true
                         downloadError = "已中断批量下载"
@@ -402,7 +385,6 @@ class ResolveViewModel(
                     batchProgress = "${index + 1}/${tasks.size}"
                     runCatching {
                         currentRepo().getShareDownloadLink(s, file, quarkCred).getOrNull()?.let { link ->
-                            // 文件夹内文件用相对路径（保持目录结构）；根目录文件用取链返回的文件名
                             enqueueDownload(link, quarkCred, if (relPath.isBlank()) link.filename else relPath)
                             okCount++
                         }
@@ -410,7 +392,6 @@ class ResolveViewModel(
                 }
                 if (!interrupted) {
                     downloadError = if (okCount > 0) "已加入 $okCount 个下载任务" else "获取下载链接失败"
-                    // 全部获取完再一次性切到下载页
                     if (okCount > 0) downloadStarted = true
                 }
                 exitMultiSelect()
@@ -422,12 +403,6 @@ class ResolveViewModel(
         }
     }
 
-    /**
-     * 递归收集分享文件夹内所有文件（保持目录结构）。
-     * @param dirFid 分享内目录 fid
-     * @param prefix 相对路径前缀（如 "文件夹A/子目录"）
-     * @param result 输出：文件 + 相对路径（"文件夹A/子目录/文件.mp4"）
-     */
     private suspend fun collectShareFolder(
         s: ShareSession,
         dirFid: String,
@@ -462,8 +437,12 @@ class ResolveViewModel(
     var pathNames by mutableStateOf<List<String>>(emptyList())
         private set
 
-    /** 当前解析平台（QUARK / UC / XUNLEI），由链接自动检测 */
+    /** 当前旧版解析平台。新增公开 Provider 不写入此枚举，避免污染现有 Repository 路由。 */
     private var currentPlatform: SharePlatform = SharePlatform.QUARK
+
+    /** 当前公开下载 Provider；非空时绕过账号凭证与旧版 Repository。 */
+    private var currentPublicProviderId: String? = null
+    private var currentPublicHeaders: Map<String, String> = emptyMap()
 
     /** 当前平台凭证（夸克/UC/百度/139 用 cookie，迅雷/123 用 access_token） */
     private suspend fun currentCredential(): String? = when (currentPlatform) {
@@ -493,7 +472,9 @@ class ResolveViewModel(
         else -> QuarkConstants.DEFAULT_PDIR_FID
     }
 
-    private fun platformName(): String = when (currentPlatform) {
+    private fun platformName(): String = currentPublicProviderId?.let { id ->
+        CloudProviderRegistry.byId(id)?.displayName
+    } ?: when (currentPlatform) {
         SharePlatform.UC -> "UC 网盘"
         SharePlatform.XUNLEI -> "迅雷网盘"
         SharePlatform.BAIDU -> "百度网盘"
@@ -502,15 +483,53 @@ class ResolveViewModel(
         else -> "夸克网盘"
     }
 
-    /** 开始解析：链接 → token →（密码）→ 根目录列表 */
+    /** 开始解析：旧 Provider 走目录解析；公开下载 Provider 直接生成下载候选。 */
     fun startResolve(link: String, pwd: String?) {
         viewModelScope.launch {
             uiState = ResolveUiState.Loading
+            downloadLink = null
+            currentPublicProviderId = null
+            currentPublicHeaders = emptyMap()
+
             val parsed = ShareLinkParser.parse(link)
             if (parsed == null) {
-                uiState = ResolveUiState.Error("无法识别分享链接")
+                val provider = CloudProviderRegistry.detect(link)
+                if (provider == null) {
+                    uiState = ResolveUiState.Error("无法识别分享链接")
+                    return@launch
+                }
+
+                if (provider.readiness == ProviderReadiness.PUBLIC_DOWNLOAD && PublicShareResolvers.supports(provider.id)) {
+                    PublicShareResolvers.resolve(link)
+                        .onSuccess { candidate ->
+                            currentPublicProviderId = provider.id
+                            currentPublicHeaders = candidate.headers
+                            val fallbackName = "${provider.id}_download"
+                            val name = candidate.fileKey
+                                ?.substringAfterLast('/')
+                                ?.substringBefore('?')
+                                ?.takeIf { it.isNotBlank() }
+                                ?: fallbackName
+                            downloadLink = DownloadLink(
+                                fid = candidate.fileKey ?: provider.id,
+                                filename = name,
+                                downloadUrl = candidate.downloadUrl,
+                                size = -1L
+                            )
+                            uiState = ResolveUiState.Idle
+                        }
+                        .onFailure { e ->
+                            uiState = ResolveUiState.Error(e.message ?: "${provider.displayName} 公开分享解析失败")
+                        }
+                    return@launch
+                }
+
+                uiState = ResolveUiState.Error(
+                    "已识别为${provider.displayName}；该 Provider 的账号认证/目录浏览/取链适配尚未完成"
+                )
                 return@launch
             }
+
             currentPlatform = parsed.platform
             val credential = currentCredential()
             if (credential.isNullOrBlank()) {
@@ -577,6 +596,8 @@ class ResolveViewModel(
         session = null
         downloadLink = null
         pathNames = emptyList()
+        currentPublicProviderId = null
+        currentPublicHeaders = emptyMap()
         uiState = ResolveUiState.Idle
     }
 
@@ -588,7 +609,6 @@ class ResolveViewModel(
         val s = session ?: return
         if (level < 0 || level > pathNames.size) return
         if (level == pathNames.size) return
-        // 弹出目录栈直到对应层级；level=0 时回到分享根目录
         while (dirStack.size > level) dirStack.removeLast()
         currentDirFid = if (dirStack.isEmpty()) currentDefaultDirFid() else dirStack.last()
         pathNames = pathNames.take(level)
@@ -615,7 +635,6 @@ class ResolveViewModel(
                     downloadError = "登录已失效，请重新登录"
                     return@launch
                 }
-                // 夸克/UC 共用 __puus：取链前确保新鲜（直链签名绑定取链时刻的 Cookie）
                 val quarkCred = when (currentPlatform) {
                     SharePlatform.QUARK -> accountRepository.getFreshCookie() ?: credential
                     SharePlatform.UC -> ucAccountRepository.getFreshCookie() ?: credential
@@ -633,7 +652,11 @@ class ResolveViewModel(
     fun dismissDownloadDialog() {
         val link = downloadLink
         downloadLink = null
-        // 弹窗被关闭（用户点管壁/「关闭」，未开始下载）：清理夸克临时转存，避免云端残留
+        if (currentPublicProviderId != null) {
+            currentPublicProviderId = null
+            currentPublicHeaders = emptyMap()
+            return
+        }
         if (link?.cleanupDirFid != null) {
             viewModelScope.launch {
                 val credential = accountRepository.getAccount()?.cookie ?: return@launch
@@ -659,42 +682,34 @@ class ResolveViewModel(
         val isC139 = currentPlatform == SharePlatform.C139
         val isPan123 = currentPlatform == SharePlatform.PAN123
         val isQuark = currentPlatform == SharePlatform.QUARK
-        // 【关键修复】夸克/UC 共用 __puus：取链与下载必须用同一份已刷新 Cookie（AlistGo/alist#830 类缺陷）
-        // getFreshCookie 有 90 分钟间隔保护，与取链处调用幂等，得到的是同一份。
         val effectiveCredential = when (currentPlatform) {
             SharePlatform.QUARK -> accountRepository.getFreshCookie() ?: credential
             SharePlatform.UC -> ucAccountRepository.getFreshCookie() ?: credential
             else -> credential
         }
-        // 迅雷直链 URL 自带签名，无需 Cookie；夸克/UC/百度需 Cookie + UA；139 直链为 CDN 签名地址；123 直链需 Referer
         val headers = when {
-            isXunlei -> mapOf("User-Agent" to XunleiConstants.APP_UA) // 迅雷直链必须用官方 app UA，浏览器 UA 会触发 CDN 降级（200整文件）
+            isXunlei -> mapOf("User-Agent" to XunleiConstants.APP_UA)
             isBaidu -> mapOf(
                 "Cookie" to credential,
                 "User-Agent" to BaiduConstants.UA_NETDISK
             )
             isC139 -> mapOf("User-Agent" to C139Constants.PC_UA)
-            // 123 分享/个人盘直链为 CDN 签名地址，下载必须带 Referer（文档 §5.3.1）
             isPan123 -> mapOf(
                 "User-Agent" to Pan123Constants.WEB_UA,
                 "Referer" to Pan123Constants.DOWNLOAD_REFERER
             )
-            // UC：OSS 直链按 Referer 档位限速（缺 Referer 被 Callback 限到 ~100 KB/s），
-            // 补官方 Web 客户端同款 Referer/Origin 即满速
             isUC -> mapOf(
                 "Cookie" to credential,
                 "User-Agent" to UCConstants.USER_AGENT,
                 "Referer" to UCConstants.DOWNLOAD_REFERER,
                 "Origin" to UCConstants.WEB_ORIGIN
             )
-            // 夸克：防盗链需固定 Referer（对齐 AList quark_uc）
             else -> mapOf(
                 "Cookie" to effectiveCredential,
                 "User-Agent" to QuarkConstants.API_USER_AGENT,
                 "Referer" to QuarkConstants.DOWNLOAD_REFERER
             )
         }
-        // 夸克直链：原样使用（关闭节点改写/探测，避免消耗直链额度与节点签名 412）
         val effectiveUrl = if (isQuark) {
             QuarkCdn.fastest(link.downloadUrl, effectiveCredential)
         } else {
@@ -706,7 +721,6 @@ class ResolveViewModel(
             headers = headers,
             size = link.size
         ) {
-            // 下载完成（master 版通过 onComplete 回调）：清理网盘临时转存目录；失败/取消不触发
             val dirFid = link.cleanupDirFid
             if (dirFid != null) {
                 val credential = currentCredential()
@@ -720,8 +734,23 @@ class ResolveViewModel(
     /** 将直链加入下载队列（单文件下载：入队后立即切换到下载页） */
     fun startDownload(link: DownloadLink) {
         viewModelScope.launch {
-            // 开始下载：先关闭弹窗（临时转存由下载完成 onComplete 清理，不在此时删）
             downloadLink = null
+
+            // 公开 Provider 无需账号凭证，直接交给统一下载器。
+            val publicProvider = currentPublicProviderId
+            if (publicProvider != null) {
+                downloadManager.enqueue(
+                    url = link.downloadUrl,
+                    fileName = link.filename,
+                    headers = currentPublicHeaders,
+                    size = link.size
+                )
+                currentPublicProviderId = null
+                currentPublicHeaders = emptyMap()
+                downloadStarted = true
+                return@launch
+            }
+
             val credential = currentCredential()
             if (credential.isNullOrBlank()) {
                 downloadError = "请先登录网盘"
