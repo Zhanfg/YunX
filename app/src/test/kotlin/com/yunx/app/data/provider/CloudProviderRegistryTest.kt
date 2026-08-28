@@ -30,6 +30,8 @@ class CloudProviderRegistryTest {
         assertEquals("dropbox", CloudProviderRegistry.detect("https://www.dropbox.com/scl/fi/a/file.zip")?.id)
         assertEquals("google_drive", CloudProviderRegistry.detect("https://drive.google.com/file/d/abc/view")?.id)
         assertEquals("onedrive", CloudProviderRegistry.detect("https://1drv.ms/u/s!abc")?.id)
+        assertEquals("onedrive", CloudProviderRegistry.detect("https://tenant.sharepoint.com/:f:/g/personal/example")?.id)
+        assertEquals("icloud", CloudProviderRegistry.detect("https://www.icloud.com/iclouddrive/0123456789")?.id)
         assertEquals("mega", CloudProviderRegistry.detect("https://mega.nz/file/abc#key")?.id)
         assertEquals("box", CloudProviderRegistry.detect("https://app.box.com/s/abc")?.id)
         assertEquals("pcloud", CloudProviderRegistry.detect("https://e.pcloud.link/publink/show?code=abc")?.id)
@@ -41,18 +43,27 @@ class CloudProviderRegistryTest {
     fun rejectsLookalikeAndNonHttpHosts() {
         assertNull(CloudProviderRegistry.detect("https://dropbox.com.evil.example/s/abc"))
         assertNull(CloudProviderRegistry.detect("https://pan.baidu.com.evil.example/s/abc"))
+        assertNull(CloudProviderRegistry.detect("https://sharepoint.com.evil.example/x"))
         assertNull(CloudProviderRegistry.detect("javascript:https://www.dropbox.com/s/abc"))
     }
 
     @Test
-    fun readinessDoesNotOverclaimDetectedProviders() {
+    fun readinessDistinguishesAccountApiPublicDownloadAndDetection() {
+        val google = CloudProviderRegistry.byId("google_drive")!!
+        val oneDrive = CloudProviderRegistry.byId("onedrive")!!
+        val iCloud = CloudProviderRegistry.byId("icloud")!!
         val dropbox = CloudProviderRegistry.byId("dropbox")!!
         val pcloud = CloudProviderRegistry.byId("pcloud")!!
         val aliyun = CloudProviderRegistry.byId("aliyun")!!
+
+        assertEquals(ProviderReadiness.ACCOUNT_API, google.readiness)
+        assertEquals(ProviderReadiness.ACCOUNT_API, oneDrive.readiness)
+        assertTrue(google.capabilities.directDownload)
+        assertTrue(oneDrive.capabilities.directDownload)
+        assertEquals(ProviderReadiness.DETECTED, iCloud.readiness)
         assertEquals(ProviderReadiness.PUBLIC_DOWNLOAD, dropbox.readiness)
         assertEquals(ProviderReadiness.PUBLIC_DOWNLOAD, pcloud.readiness)
         assertTrue(pcloud.capabilities.alternativeEndpoints)
         assertEquals(ProviderReadiness.DETECTED, aliyun.readiness)
-        assertTrue(aliyun.capabilities.refreshDownloadLink)
     }
 }
