@@ -77,9 +77,10 @@ class GlobalCloudViewModel(
                 .onSuccess { source ->
                     downloadManager.enqueue(
                         url = source.primaryUrl,
-                        fileName = file.name,
+                        fileName = file.downloadName ?: file.name,
                         headers = source.headers,
-                        size = file.size.takeIf { it > 0 } ?: -1L
+                        // Provider 导出文件（如 Google Docs）原始 size 不代表导出产物，交给下载器探测。
+                        size = if (file.downloadName != null) -1L else file.size.takeIf { it > 0 } ?: -1L
                     )
                     downloadStarted = true
                     message = "已加入下载任务"
