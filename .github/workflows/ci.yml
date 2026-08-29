@@ -2,7 +2,9 @@ name: Android CI
 
 on:
   push:
-    branches: [ "master" ]
+    branches:
+      - "master"
+      - "feat/**"
   pull_request:
     branches: [ "master" ]
 
@@ -40,12 +42,15 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      # 完整构建 debug APK（验证编译链路 + 产出可安装包）
-      - name: Build debug APK
-        run: ./gradlew assembleDebug
+      - name: Run Android lint
+        run: ./gradlew lintDebug
 
       - name: Run unit tests
         run: ./gradlew testDebugUnitTest
+
+      # 同时验证 debug / release 编译链路；release 未配置生产签名时产出 unsigned APK 也可用于静态构建验证
+      - name: Build APKs
+        run: ./gradlew assembleDebug assembleRelease
 
       # 上传 debug APK 产物（PR 评论 / Actions 页面可下载）
       - name: Upload debug APK
@@ -54,3 +59,11 @@ jobs:
           name: app-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      - name: Upload lint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-report
+          path: app/build/reports/lint-results-debug.html
+          if-no-files-found: warn

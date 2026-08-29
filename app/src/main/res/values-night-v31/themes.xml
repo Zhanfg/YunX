@@ -1,7 +1,8 @@
 <resources>
-    <style name="Theme.ComposeEmptyActivity" parent="android:Theme.Material.Light.NoActionBar">
+    <style name="Theme.ComposeEmptyActivity" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">@color/yunx_launch_background</item>
-        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowSplashScreenBackground">@color/yunx_launch_background</item>
+        <item name="android:windowLightStatusBar">false</item>
         <item name="android:navigationBarColor">@color/yunx_launch_background</item>
         <item name="android:statusBarColor">@color/yunx_launch_background</item>
     </style>

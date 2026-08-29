@@ -19,3 +19,9 @@ gradle-app.setting
 !gradle-wrapper.jar
 local.properties
 
+# IDE / local workspace
+.idea/
+.vscode/
+workspace.json
+*.iml
+.DS_Store

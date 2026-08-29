@@ -86,8 +86,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** 可选的下载线程数（最高 512） */
-private val threadOptions = listOf(1, 2, 4, 8, 16, 32)
+/** 可选的下载线程上限（实际 worker 会按 Provider/CDN 安全策略动态约束） */
+private val threadOptions = listOf(1, 2, 4, 8, 16, 32, 64, 128)
 
 /**
  * 设置页：下载线程数设置 + 主题外观 + 检查更新 + 日志与网盘认证。
@@ -206,7 +206,7 @@ fun SettingsScreen(
         SettingsItem(
             icon = Icons.Outlined.Tune,
             title = "下载线程数",
-            description = "当前 $threads 线程（分片并发）",
+            description = "上限 $threads 线程（实际并发会按平台与网络状态自动约束）",
             onClick = { showThreadsDialog = true }
         )
 
@@ -533,17 +533,16 @@ fun SettingsScreen(
     if (showThreadsDialog) {
         AlertDialog(
             onDismissRequest = { showThreadsDialog = false },
-            title = { Text("下载线程数") },
+            title = { Text("下载线程上限") },
             text = {
                 Column {
                     Text(
-                        text = "线程数越多，分片并行下载越快（需服务器支持 Range）",
+                        text = "64/128 表示允许的最大分片并发；实际 worker 会根据网盘、CDN 与网络状态自动采用更安全的值。",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    // 两列网格：10 个选项 5 行一屏可见，无需滑动就知道有哪些档位；
-                    // 仍保留限高 + 滚动，横屏/矮屏时兜底
+                    // 两列网格；保留限高 + 滚动，横屏/矮屏时兜底
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()

@@ -1,6 +1,7 @@
 package com.yunx.app.data.prefs
 
 import android.content.Context
+import com.yunx.app.data.download.DownloadConcurrencyPolicy
 
 /**
  * 应用设置（SharedPreferences 持久化）。
@@ -10,11 +11,15 @@ class SettingsRepository(context: Context) {
     private val prefs = context.applicationContext
         .getSharedPreferences("yunx_settings", Context.MODE_PRIVATE)
 
-    /** 下载线程数（分片并发数），默认 16，上限 32 */
+    /** 下载线程数（分片并发数），默认 16；128 是用户允许上限，实际 worker 仍受 Provider/运行时策略约束 */
     var downloadThreads: Int
-        get() = prefs.getInt("download_threads", DEFAULT_DOWNLOAD_THREADS).coerceIn(1, 32)
+        get() = DownloadConcurrencyPolicy.clampUserThreads(
+            prefs.getInt("download_threads", DEFAULT_DOWNLOAD_THREADS)
+        )
         set(value) {
-            prefs.edit().putInt("download_threads", value.coerceIn(1, 32)).apply()
+            prefs.edit()
+                .putInt("download_threads", DownloadConcurrencyPolicy.clampUserThreads(value))
+                .apply()
         }
 
     /** 自定义下载保存目录（SAF tree Uri，content://...）；null/空 = 系统默认 Download 目录 */
@@ -102,7 +107,7 @@ class SettingsRepository(context: Context) {
         }
 
     companion object {
-        const val DEFAULT_DOWNLOAD_THREADS = 16
+        const val DEFAULT_DOWNLOAD_THREADS = DownloadConcurrencyPolicy.DEFAULT_USER_THREADS
         const val DEFAULT_MAX_CONCURRENT_DOWNLOADS = 1
         const val DEFAULT_DOWNLOAD_RETRY_COUNT = 3
 
